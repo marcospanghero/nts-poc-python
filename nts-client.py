@@ -51,7 +51,7 @@ def main():
     cookie_len = len(cookies[0])
 
     req = NTSClientPacketHelper()
-    req.transmit_timestamp = struct.unpack('Q', epoch_to_ntp_ts(time.time()))[0]
+    req.transmit_timestamp = struct.unpack('Q', epoch_to_ntp_ts(time.time()).to_bytes(8, byteorder='little'))[0]
 
     unique_identifier = os.urandom(32)
 
