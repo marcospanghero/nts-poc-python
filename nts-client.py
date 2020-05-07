@@ -8,6 +8,8 @@ import struct
 import socket
 import rfc7822
 import binascii
+import time
+from util import epoch_to_ntp_ts
 
 import aes_siv
 
@@ -49,7 +51,7 @@ def main():
     cookie_len = len(cookies[0])
 
     req = NTSClientPacketHelper()
-    req.transmit_timestamp = struct.unpack('Q', os.urandom(8))[0]
+    req.transmit_timestamp = struct.unpack('Q', epoch_to_ntp_ts(time.time()))[0]
 
     unique_identifier = os.urandom(32)
 
@@ -117,5 +119,11 @@ def main():
     with open('client.ini', 'w') as f:
         config.write(f)
 
+
 if __name__ == '__main__':
-    main()
+    try:
+        while True:
+            main()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
