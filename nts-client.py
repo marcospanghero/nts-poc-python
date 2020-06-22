@@ -17,11 +17,34 @@ from ntp import NTPPacket, NTPExtensionField,  NTPExtensionFieldType
 from nts import NTSClientPacketHelper, NTSCookie
 from constants import *
 
+import logging
+import time
+from logging.handlers import RotatingFileHandler
+
+
+def create_rotating_log(path):
+    """
+    Creates a rotating log
+    """
+    logger = logging.getLogger("Rotating Log")
+    logger.setLevel(logging.INFO)
+
+    # add a rotating handler
+    handler = RotatingFileHandler(path, maxBytes=200000000,
+                                  backupCount=10)
+    logger.addHandler(handler)
+
+    return logger
+
+
 def main():
     try:
         import configparser
     except ImportError:
         import ConfigParser as configparser
+
+    log_file = "nts-ntp.log"
+    logger = create_rotating_log(log_file)
 
     config = configparser.RawConfigParser()
     config.read('client.ini')
@@ -46,6 +69,8 @@ def main():
     import os
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    SO_TIMESTAMPNS = 35
+    sock.setsockopt(socket.SOL_SOCKET, SO_TIMESTAMPNS, 1)
     sock.settimeout(1)
 
     cookie_len = len(cookies[0])
@@ -92,13 +117,27 @@ def main():
     sock.sendto(buf, nts_addr)
 
     try:
-        data, addr = sock.recvfrom(65536)
+        data, ancdata, msg_flags, addr = sock.recvmsg(65536, 2048)
     except socket.timeout:
         print("Timeout")
         return
+    if (len(ancdata) > 0):
+        # print(len(ancdata),len(ancdata[0]),ancdata[0][0],ancdata[0][1],ancdata[0][2])
+        # print('ancdata[0][2]:',type(ancdata[0][2])," - ",ancdata[0][2], " - ",len(ancdata[0][2]));
+        for i in ancdata:
+            print('ancdata: (cmsg_level, cmsg_type, cmsg_data)=(', i[0], ",", i[1], ", (", len(i[2]), ") ", i[2], ")");
+            if (i[0] != socket.SOL_SOCKET or i[1] != SO_TIMESTAMPNS):
+                continue
+            tmp = (struct.unpack("iiii", i[2]))
+            timestamp = tmp[0] + tmp[2] * 1e-9
+            print("SCM_TIMESTAMPNS,", tmp, ", timestamp=", epoch_to_ntp_ts(timestamp))
 
     resp = NTSClientPacketHelper.unpack(data, unpack_key = s2c_key)
     print(resp)
+
+    log = "{},{},{},{}".format(resp.origin_timestamp, resp.receive_timestamp, resp.transmit_timestamp,  epoch_to_ntp_ts(timestamp))
+
+    logger.info(log)
 
     if resp.origin_timestamp != req.transmit_timestamp:
         raise ValueError("transmitted origin and received transmit timestamps do not match")
@@ -111,13 +150,13 @@ def main():
 
     cookies.extend(resp.nts_cookies)
 
-    config.remove_section('cookies')
-    config.add_section('cookies')
-    for k, v in enumerate(cookies):
-        config.set('cookies', str(k), binascii.hexlify(v).decode('ascii'))
-
-    with open('client.ini', 'w') as f:
-        config.write(f)
+    # config.remove_section('cookies')
+    # config.add_section('cookies')
+    # for k, v in enumerate(cookies):
+    #     config.set('cookies', str(k), binascii.hexlify(v).decode('ascii'))
+    #
+    # with open('client.ini', 'w') as f:
+    #     config.write(f)
 
 
 if __name__ == '__main__':
