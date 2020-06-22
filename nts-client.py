@@ -158,11 +158,11 @@ def main():
     # with open('client.ini', 'w') as f:
     #     config.write(f)
 
+    time.sleep(1)
 
 if __name__ == '__main__':
     try:
         while True:
             main()
-            time.sleep(1)
     except KeyboardInterrupt:
         pass
